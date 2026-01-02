@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#1a1a2e">
-<title>Scale Degree Trainer - Piano v6.13.0</title>
+<title>Scale Degree Trainer - Piano v6.14.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary-color:#4a90e2;--secondary-color:#7b68ee;--success-color:#4caf50;--error-color:#f44336;--bg-dark:#1a1a2e;--bg-card:#16213e;--text-primary:#fff;--text-secondary:#a0a0a0}
@@ -24,6 +24,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 .scale-dropdown{width:100%;padding:15px;background:var(--bg-card);border:2px solid var(--primary-color);border-radius:12px;color:var(--text-primary);font-size:1.05rem;cursor:pointer;transition:.3s}
 .scale-dropdown:hover{border-color:var(--secondary-color);box-shadow:0 5px 15px rgba(74,144,226,.3)}
 .scale-dropdown option{background:var(--bg-card);color:var(--text-primary);padding:10px}
+.scale-dropdown:disabled { opacity: 0.5; cursor: not-allowed; border-color: #555; } /* Stile disabilitato */
+
 .info-box{background:var(--bg-card);padding:16px;border-radius:12px;margin-bottom:16px;border-left:4px solid var(--primary-color)}
 .info-box h3{color:var(--primary-color);margin-bottom:8px}
 .info-box p{color:var(--text-secondary);line-height:1.6;margin-bottom:6px}
@@ -127,7 +129,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 .btn-small { padding: 6px 12px; font-size: 0.9rem; border-radius: 6px; border: 1px solid var(--primary-color); background: rgba(74, 144, 226, 0.2); color: #fff; cursor: pointer; }
 
 #audioInputContainer { width: 100%; max-width: 450px; margin-bottom: 15px; display:none; }
-#audioInputSelect { width: 100%; padding: 12px; background: var(--bg-card); border: 2px solid rgba(74,144,226,0.5); border-radius: 10px; color: #fff; font-size: 0.95rem; }
+#audioInputSelect { width: 100%; padding: 12px; background: var(--bg-card); border: 2px solid rgba(74,144,226,0.5); border-radius: 10px; color: #fff; font-size: 0.95rem; transition: opacity 0.3s; }
+#audioInputSelect:disabled { background: #2a2a3e; color: #888; border-color: #444; }
 
 .midi-status {
     color: var(--success-color);
@@ -147,7 +150,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 <div class="container">
   <div id="setupScreen" class="screen active">
     <h1>🎹 Scale Degree Trainer</h1>
-    <div class="version-badge" id="versionBadge">v6.13.0 • Voice Select</div>
+    <div class="version-badge" id="versionBadge">v6.14.0 • MIDI Lock</div>
     <p class="subtitle">Impara i gradi delle scale maggiori</p>
 
     <div id="audioInputContainer">
@@ -344,7 +347,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 </div>
 
 <script>
-const APP_VERSION='v6.13.0';
+const APP_VERSION='v6.14.0';
 
 class IntervalTrainerApp{
   constructor(){
@@ -460,14 +463,26 @@ class IntervalTrainerApp{
       const inputs = this.midiAccess ? this.midiAccess.inputs.size : 0;
       this.midiActive = inputs > 0;
       const el = document.getElementById('midiStatus');
-      const micSel = document.getElementById('audioInputContainer');
+      const micSel = document.getElementById('audioInputSelect');
+      const micOpt = document.getElementById('audioInputSelect').options[0];
+      
       if(el) {
           if (this.midiActive) {
               el.style.display = 'block';
-              if(micSel) micSel.style.opacity = '0.5'; 
+              if(micSel) {
+                  micSel.disabled = true;
+                  micSel.style.opacity = '0.5';
+                  micSel.title = "Microfono disabilitato perché il MIDI è attivo";
+                  // Se era in ascolto, lo ferma
+                  if(this.isListening) this.stopMicrophone(); 
+              }
           } else {
               el.style.display = 'none';
-              if(micSel) micSel.style.opacity = '1';
+              if(micSel) {
+                  micSel.disabled = false;
+                  micSel.style.opacity = '1';
+                  micSel.title = "";
+              }
           }
       }
   }
@@ -498,13 +513,11 @@ class IntervalTrainerApp{
       } catch(e) {}
   }
 
-  // --- VOICE LOGIC ---
   loadVoices(){
     this.voices = window.speechSynthesis.getVoices();
     const voiceSelect = document.getElementById('voiceSelect');
     voiceSelect.innerHTML = '';
     
-    // Filtra voci italiane (o inglesi se non ce ne sono)
     let availableVoices = this.voices.filter(v => v.lang.startsWith('it'));
     if(availableVoices.length === 0) availableVoices = this.voices.filter(v => v.lang.startsWith('en'));
 
@@ -516,7 +529,6 @@ class IntervalTrainerApp{
     });
 
     if(availableVoices.length > 0) {
-        // Se c'è una voce selezionata precedentemente che esiste ancora, usala
         if(this.selectedVoice && availableVoices.find(v => v.name === this.selectedVoice.name)) {
             voiceSelect.value = this.selectedVoice.name;
         } else {
@@ -534,7 +546,6 @@ class IntervalTrainerApp{
     qs('levelSelect').addEventListener('change',e=>this.trainingLevel=e.target.value);
     if(!this.isIOS) { qs('audioInputSelect').addEventListener('change', e => { this.audioInputDeviceId = e.target.value; }); }
     
-    // VOICE SELECT
     qs('voiceSelect').addEventListener('change', (e) => {
         this.selectedVoice = this.voices.find(v => v.name === e.target.value);
         if(this.selectedVoice) {
@@ -613,6 +624,7 @@ class IntervalTrainerApp{
     });
   }
 
+  // --- AUDIO LOGIC ---
   async ensureAudioContext(){
     if(!this.audioContext){ this.audioContext=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'}); }
     if(this.audioContext.state==='suspended'){ try{await this.audioContext.resume()}catch(_){ } }
@@ -622,17 +634,28 @@ class IntervalTrainerApp{
       await this.ensureAudioContext();
       if(enableMic && !this.midiActive) {
           try {
-              const stream = await this.getStream(); this.stream = stream;
-              await this.buildAudioChain(stream); this.isListening = true;
+              const stream = await this.getStream(); 
+              this.stream = stream;
+              await this.buildAudioChain(stream); 
+              this.isListening = true;
               if(!this.useScriptNode) this.detectPitch();
-          } catch(err) { alert('Errore microfono. Se usi MIDI, ignora questo messaggio.'); }
+          } catch(err) { alert('Errore microfono.'); }
       } else {
-          this.isListening = false; 
+          this.stopMicrophone(); // Disabilita esplicitamente mic se midi è attivo
           if(this.midiActive) {
               const el = document.getElementById('statusText');
               if(el) el.textContent = "Usa la tastiera MIDI";
               document.getElementById('statusIndicatorBox').classList.add('midi-mode');
           }
+      }
+  }
+
+  // NUOVO: Ferma fisicamente il microfono
+  stopMicrophone() {
+      this.isListening = false;
+      if(this.stream) {
+          this.stream.getTracks().forEach(track => track.stop());
+          this.stream = null;
       }
   }
 
@@ -662,6 +685,7 @@ class IntervalTrainerApp{
       this.lp.connect(this.scriptNode); this.lp.connect(this.analyser);
       this.scriptNode.connect(this.muteNode); this.muteNode.connect(this.audioContext.destination);
       this.scriptNode.onaudioprocess=(e)=>{
+        if(!this.isListening) return; // Stop processing if disabled
         const ch=e.inputBuffer.getChannelData(0);
         const inCal=document.getElementById('calibrationScreen').classList.contains('active');
         this.processAudioBlock(ch,this.audioContext.sampleRate,inCal);
@@ -736,8 +760,9 @@ class IntervalTrainerApp{
   }
 
   detectPitch(){
+    if(!this.isListening) return; // Stop loop if disabled
     if(this.isProcessingResult || this.isSpeaking) { requestAnimationFrame(()=>this.detectPitch()); return; }
-    if(!this.isListening || this.useScriptNode) return;
+    if(this.useScriptNode) return;
     this.analyser.getFloatTimeDomainData(this.dataArray);
     const rms=this.computeRms(this.dataArray); this.currentVolume=rms;
     if(this.waitingForSilence) {
@@ -921,12 +946,20 @@ class IntervalTrainerApp{
               if(!this.useScriptNode) this.detectPitch();
           } catch(err) { alert('Errore microfono. Se usi MIDI, ignora questo messaggio.'); }
       } else {
-          this.isListening = false; 
+          this.stopMicrophone(); // Disabilita esplicitamente mic
           if(this.midiActive) {
               const el = document.getElementById('statusText');
               if(el) el.textContent = "Usa la tastiera MIDI";
               document.getElementById('statusIndicatorBox').classList.add('midi-mode');
           }
+      }
+  }
+
+  stopMicrophone() {
+      this.isListening = false;
+      if(this.stream) {
+          this.stream.getTracks().forEach(track => track.stop());
+          this.stream = null;
       }
   }
 
@@ -1031,7 +1064,6 @@ class IntervalTrainerApp{
     const lvlData = this.levels[this.trainingLevel];
     const label = lvlData.labels[this.currentDegreeIndex];
     
-    // PRONUNCIA INTELLIGENTE
     let spokenLabel = label;
     if(this.pronunciationMap[label]) {
         spokenLabel = this.pronunciationMap[label];
@@ -1043,7 +1075,7 @@ class IntervalTrainerApp{
     const textToSpeak = `${spokenLabel} di ${scaleName}`;
     this.currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
     this.currentUtterance.lang = 'it-IT';
-    if(this.selectedVoice) this.currentUtterance.voice = this.selectedVoice; // Usa la voce selezionata
+    if(this.selectedVoice) this.currentUtterance.voice = this.selectedVoice;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(this.currentUtterance);
   }
@@ -1051,7 +1083,7 @@ class IntervalTrainerApp{
 
 document.addEventListener('DOMContentLoaded',()=>{
   console.log(`🚀 Scale Degree Trainer ${APP_VERSION}`);
-  document.getElementById('versionBadge').textContent=`${APP_VERSION} • Voice Select`;
+  document.getElementById('versionBadge').textContent=`${APP_VERSION} • MIDI Lock`;
   window.app=new IntervalTrainerApp();
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
