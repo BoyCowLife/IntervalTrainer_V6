@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#1a1a2e">
-<title>Scale Degree Trainer - Piano v6.15.0</title>
+<title>Scale Degree Trainer - Piano v6.16.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary-color:#4a90e2;--secondary-color:#7b68ee;--success-color:#4caf50;--error-color:#f44336;--bg-dark:#1a1a2e;--bg-card:#16213e;--text-primary:#fff;--text-secondary:#a0a0a0}
@@ -77,10 +77,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 
 .final-score{background:var(--bg-card);border-radius:16px;padding:20px;text-align:center}
 .score-display{font-size:2.8rem;font-weight:700;background:linear-gradient(135deg,var(--primary-color),var(--secondary-color));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:10px 0}
-.score-breakdown{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:16px 0}
+
+/* Griglia aggiornata per 3 colonne */
+.score-breakdown{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+
 .score-item{background:rgba(74,144,226,.1);padding:12px;border-radius:12px}
-.score-item-value{font-size:1.4rem;font-weight:700;color:var(--primary-color)}
-.score-item-label{color:var(--text-secondary);margin-top:2px;font-size:0.9rem}
+.score-item-value{font-size:1.3rem;font-weight:700;color:var(--primary-color)}
+.score-item-label{color:var(--text-secondary);margin-top:2px;font-size:0.85rem}
 .sticky-footer{position:sticky;bottom:0;z-index:2}
 .small{font-size:.9rem;opacity:.8}
 
@@ -140,7 +143,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 <div class="container">
   <div id="setupScreen" class="screen active">
     <h1>🎹 Scale Degree Trainer</h1>
-    <div class="version-badge" id="versionBadge">v6.15.0 • Enharmonic Fix</div>
+    <div class="version-badge" id="versionBadge">v6.16.0 • Time Tracker</div>
     <p class="subtitle">Impara i gradi delle scale maggiori</p>
 
     <div id="audioInputContainer">
@@ -321,6 +324,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
       <div class="score-breakdown">
         <div class="score-item"><div class="score-item-value" id="correctCount">0</div><div class="score-item-label">Corrette</div></div>
         <div class="score-item"><div class="score-item-value" id="wrongCount">0</div><div class="score-item-label">Sbagliate</div></div>
+        <div class="score-item"><div class="score-item-value" id="totalTime">00:00</div><div class="score-item-label">Tempo</div></div>
       </div>
       
       <div id="mistakesContainer" class="mistakes-container">
@@ -337,7 +341,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 </div>
 
 <script>
-const APP_VERSION='v6.15.0';
+const APP_VERSION='v6.16.0';
 
 class IntervalTrainerApp{
   constructor(){
@@ -346,7 +350,9 @@ class IntervalTrainerApp{
     this.currentQuestion=0; this.totalQuestions=30; this.correctAnswers=0;
     this.currentDegreeIndex=null; this.currentScale=null; this.lastDegree=null;
     
+    // Stats
     this.mistakes = [];
+    this.quizStartTime = 0; // TRACKING START
 
     // Logic Locks
     this.waitingForSilence = false; 
@@ -433,7 +439,6 @@ class IntervalTrainerApp{
   }
 
   // --- HELPER ENHARMONIC ---
-  // Funzione magica per convertire i diesis in bemolle se necessario
   getScaleAppropriateName(note, scale) {
       const flatKeys = ['F','Bb','Eb','Ab','Db','Gb','Cb'];
       const isFlatKey = flatKeys.includes(scale);
@@ -622,6 +627,7 @@ class IntervalTrainerApp{
     });
   }
 
+  // --- AUDIO LOGIC ---
   async ensureAudioContext(){
     if(!this.audioContext){ this.audioContext=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'}); }
     if(this.audioContext.state==='suspended'){ try{await this.audioContext.resume()}catch(_){ } }
@@ -792,7 +798,7 @@ class IntervalTrainerApp{
     const stable=this.noteStabilityBuffer.length===this.requiredStableDetections && this.noteStabilityBuffer.every(n=>n===this.noteStabilityBuffer[0]);
     if(!stable) return;
     if(isCal){
-      const displayNote = this.getScaleAppropriateName(note, this.selectedScale); // Use selected scale in calib
+      const displayNote = this.getScaleAppropriateName(note, this.selectedScale); 
       document.getElementById('calibrationNote').textContent=displayNote;
       document.getElementById('calibrationStatus').textContent=`✓ Nota rilevata: ${displayNote}`;
       this.noteStabilityBuffer=[]; this.readyForNextNote=false; this.lastNoteTime=Date.now();
@@ -901,6 +907,14 @@ class IntervalTrainerApp{
 
   async showFinalScore(){
     this.isListening=false; this.releaseScreen(); window.speechSynthesis.cancel();
+    
+    // STOP TIMER
+    const endTime = Date.now();
+    const duration = endTime - this.quizStartTime;
+    const minutes = Math.floor(duration / 60000);
+    const seconds = Math.floor((duration % 60000) / 1000);
+    const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
     if(this.stream){ this.stream.getTracks().forEach(t=>t.stop()); this.stream=null; }
     if(this.audioContext){ try{ await this.audioContext.close(); }catch(_){} this.audioContext=null; }
     document.querySelector('.question-card').style.display='none';
@@ -910,6 +924,7 @@ class IntervalTrainerApp{
     document.getElementById('finalPercentage').textContent=Math.round((this.correctAnswers/this.totalQuestions)*100)+'%';
     document.getElementById('correctCount').textContent=this.correctAnswers;
     document.getElementById('wrongCount').textContent=this.totalQuestions-this.correctAnswers;
+    document.getElementById('totalTime').textContent = timeString; // MOSTRA TEMPO
 
     const errContainer = document.getElementById('mistakesContainer');
     const errList = document.getElementById('mistakesList');
@@ -936,6 +951,7 @@ class IntervalTrainerApp{
     document.querySelector('.question-card').style.display='block';
     document.querySelector('.status-indicator').style.display='flex';
     await this.startAudioSystem(true);
+    this.quizStartTime = Date.now(); // RESET TIMER
     this.generateQuestion();
   }
 
@@ -991,6 +1007,7 @@ class IntervalTrainerApp{
         window.speechSynthesis.speak(this.currentUtterance);
     }
     await this.startAudioSystem(true); 
+    this.quizStartTime = Date.now(); // START TIMER
     this.generateQuestion(); 
   }
 
@@ -1085,7 +1102,7 @@ class IntervalTrainerApp{
 
 document.addEventListener('DOMContentLoaded',()=>{
   console.log(`🚀 Scale Degree Trainer ${APP_VERSION}`);
-  document.getElementById('versionBadge').textContent=`${APP_VERSION} • Enharmonic Fix`;
+  document.getElementById('versionBadge').textContent=`${APP_VERSION} • Time Tracker`;
   window.app=new IntervalTrainerApp();
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
