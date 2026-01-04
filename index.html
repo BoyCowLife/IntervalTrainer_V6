@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#1a1a2e">
-<title>Scale Degree Trainer - Piano v6.16.0</title>
+<title>Scale Degree Trainer - Piano v6.17.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary-color:#4a90e2;--secondary-color:#7b68ee;--success-color:#4caf50;--error-color:#f44336;--bg-dark:#1a1a2e;--bg-card:#16213e;--text-primary:#fff;--text-secondary:#a0a0a0}
@@ -78,12 +78,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 .final-score{background:var(--bg-card);border-radius:16px;padding:20px;text-align:center}
 .score-display{font-size:2.8rem;font-weight:700;background:linear-gradient(135deg,var(--primary-color),var(--secondary-color));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:10px 0}
 
-/* Griglia aggiornata per 3 colonne */
+/* Griglia 3 colonne x 2 righe per più statistiche */
 .score-breakdown{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
 
-.score-item{background:rgba(74,144,226,.1);padding:12px;border-radius:12px}
-.score-item-value{font-size:1.3rem;font-weight:700;color:var(--primary-color)}
-.score-item-label{color:var(--text-secondary);margin-top:2px;font-size:0.85rem}
+.score-item{background:rgba(74,144,226,.1);padding:10px;border-radius:12px}
+.score-item-value{font-size:1.2rem;font-weight:700;color:var(--primary-color)}
+.score-item-label{color:var(--text-secondary);margin-top:2px;font-size:0.8rem;line-height:1.2}
 .sticky-footer{position:sticky;bottom:0;z-index:2}
 .small{font-size:.9rem;opacity:.8}
 
@@ -143,7 +143,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 <div class="container">
   <div id="setupScreen" class="screen active">
     <h1>🎹 Scale Degree Trainer</h1>
-    <div class="version-badge" id="versionBadge">v6.16.0 • Time Tracker</div>
+    <div class="version-badge" id="versionBadge">v6.17.0 • Advanced Stats</div>
     <p class="subtitle">Impara i gradi delle scale maggiori</p>
 
     <div id="audioInputContainer">
@@ -219,12 +219,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
       <p>Viene mostrato un <strong>grado</strong> di una scala maggiore. Suona la <strong>nota corrispondente</strong>.</p>
     </div>
     <div class="info-box" style="max-width:720px;margin:0 auto 14px;">
-      <h3>Livelli</h3>
-      <ul style="padding-left:20px; text-align:left; color:var(--text-secondary);">
-          <li><strong>Base:</strong> Gradi della scala maggiore (1-7).</li>
-          <li><strong>Estensioni:</strong> Include 9, 11 e 13.</li>
-          <li><strong>Cromatico:</strong> Qualsiasi nota (b2, #5, etc) rispetto alla tonica.</li>
-      </ul>
+      <h3>Statistiche Avanzate</h3>
+      <p>Alla fine, vedrai la percentuale di successo separata per i gradi <strong>Facili</strong> (I, II, VII) e quelli <strong>Difficili</strong> (III, IV, V, VI, ecc.).</p>
     </div>
     <div style="text-align:center;max-width:500px;margin:10px auto 0;">
       <button type="button" class="btn-primary" id="instrBackBtn" style="width:100%;background:rgba(255,255,255,.1);">← Torna alla Home</button>
@@ -321,11 +317,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
     <div id="finalScore" class="final-score" style="display:none;">
       <h2 style="font-size:1.5rem; margin-bottom:4px;">🎉 Sessione Completata!</h2>
       <div class="score-display" id="finalPercentage">0%</div>
+      
       <div class="score-breakdown">
         <div class="score-item"><div class="score-item-value" id="correctCount">0</div><div class="score-item-label">Corrette</div></div>
         <div class="score-item"><div class="score-item-value" id="wrongCount">0</div><div class="score-item-label">Sbagliate</div></div>
         <div class="score-item"><div class="score-item-value" id="totalTime">00:00</div><div class="score-item-label">Tempo</div></div>
-      </div>
+        
+        <div class="score-item"><div class="score-item-value" id="easyPercent">-</div><div class="score-item-label">Facili (I,II,VII)</div></div>
+        <div class="score-item"><div class="score-item-value" id="hardPercent">-</div><div class="score-item-label">Difficili (Altri)</div></div>
+        <div class="score-item" style="opacity:0;"></div> </div>
       
       <div id="mistakesContainer" class="mistakes-container">
           <div class="mistakes-title">⚠️ Errori da rivedere</div>
@@ -341,7 +341,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubunt
 </div>
 
 <script>
-const APP_VERSION='v6.16.0';
+const APP_VERSION='v6.17.0';
 
 class IntervalTrainerApp{
   constructor(){
@@ -350,9 +350,15 @@ class IntervalTrainerApp{
     this.currentQuestion=0; this.totalQuestions=30; this.correctAnswers=0;
     this.currentDegreeIndex=null; this.currentScale=null; this.lastDegree=null;
     
-    // Stats
+    // Stats & Tracking
     this.mistakes = [];
-    this.quizStartTime = 0; // TRACKING START
+    this.quizStartTime = 0;
+    
+    // NUOVI CONTATORI STATS
+    this.stats = {
+        easy: { total: 0, correct: 0 },
+        hard: { total: 0, correct: 0 }
+    };
 
     // Logic Locks
     this.waitingForSilence = false; 
@@ -849,9 +855,20 @@ class IntervalTrainerApp{
     const displayPlayed = this.getScaleAppropriateName(detected, this.currentScale);
     const displayExpected = this.getScaleAppropriateName(expectedNote, this.currentScale);
 
+    // --- NUOVA LOGICA STATISTICHE ---
+    // Gradi facili: I (index 0), II (index 1), VII (index 6 nella scala maggiore)
+    // Ma attenzione: currentDegreeIndex dipende dal livello scelto.
+    // Standard Level: 0=I, 1=II, 2=III, 3=IV, 4=V, 5=VI, 6=VII
+    const easyIndices = [0, 1, 6]; 
+    const isEasy = easyIndices.includes(this.currentDegreeIndex);
+
+    if(isEasy) this.stats.easy.total++; else this.stats.hard.total++;
+
     this.playSound(isCorrect ? 'correct' : 'wrong');
+    
     if(isCorrect){ 
         this.correctAnswers++; 
+        if(isEasy) this.stats.easy.correct++; else this.stats.hard.correct++;
     } else {
         const degreeLabel = lvlData.labels[this.currentDegreeIndex];
         this.mistakes.push({
@@ -924,7 +941,13 @@ class IntervalTrainerApp{
     document.getElementById('finalPercentage').textContent=Math.round((this.correctAnswers/this.totalQuestions)*100)+'%';
     document.getElementById('correctCount').textContent=this.correctAnswers;
     document.getElementById('wrongCount').textContent=this.totalQuestions-this.correctAnswers;
-    document.getElementById('totalTime').textContent = timeString; // MOSTRA TEMPO
+    document.getElementById('totalTime').textContent = timeString; 
+
+    // SHOW ADVANCED STATS
+    const easyP = this.stats.easy.total > 0 ? Math.round((this.stats.easy.correct / this.stats.easy.total)*100) + '%' : '-';
+    const hardP = this.stats.hard.total > 0 ? Math.round((this.stats.hard.correct / this.stats.hard.total)*100) + '%' : '-';
+    document.getElementById('easyPercent').textContent = easyP;
+    document.getElementById('hardPercent').textContent = hardP;
 
     const errContainer = document.getElementById('mistakesContainer');
     const errList = document.getElementById('mistakesList');
@@ -946,12 +969,15 @@ class IntervalTrainerApp{
   async retrySession(){
     this.currentQuestion=0; this.correctAnswers=0; this.lastDegree=null;
     this.mistakes = []; 
+    // Reset Stats
+    this.stats = { easy: { total: 0, correct: 0 }, hard: { total: 0, correct: 0 } };
+    
     document.getElementById('finalScore').style.display='none';
     document.getElementById('mistakesContainer').style.display = 'none';
     document.querySelector('.question-card').style.display='block';
     document.querySelector('.status-indicator').style.display='flex';
     await this.startAudioSystem(true);
-    this.quizStartTime = Date.now(); // RESET TIMER
+    this.quizStartTime = Date.now(); 
     this.generateQuestion();
   }
 
@@ -964,7 +990,7 @@ class IntervalTrainerApp{
               if(!this.useScriptNode) this.detectPitch();
           } catch(err) { alert('Errore microfono. Se usi MIDI, ignora questo messaggio.'); }
       } else {
-          this.stopMicrophone(); // Disabilita esplicitamente mic
+          this.stopMicrophone(); 
           if(this.midiActive) {
               const el = document.getElementById('statusText');
               if(el) el.textContent = "Usa la tastiera MIDI";
@@ -998,6 +1024,7 @@ class IntervalTrainerApp{
 
   async startQuiz(){ 
     this.mistakes = []; 
+    this.stats = { easy: { total: 0, correct: 0 }, hard: { total: 0, correct: 0 } }; // Reset stats
     this.show('quizScreen'); await this.keepScreenAwake();
     if(this.useTTS) {
         window.speechSynthesis.cancel();
@@ -1102,7 +1129,7 @@ class IntervalTrainerApp{
 
 document.addEventListener('DOMContentLoaded',()=>{
   console.log(`🚀 Scale Degree Trainer ${APP_VERSION}`);
-  document.getElementById('versionBadge').textContent=`${APP_VERSION} • Time Tracker`;
+  document.getElementById('versionBadge').textContent=`${APP_VERSION} • Advanced Stats`;
   window.app=new IntervalTrainerApp();
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
